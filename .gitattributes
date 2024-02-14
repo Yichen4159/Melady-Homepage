@@ -37,3 +37,4 @@ checkpoints/192checkpoint.pth filter=lfs diff=lfs merge=lfs -text
 checkpoints/336checkpoint.pth filter=lfs diff=lfs merge=lfs -text
 checkpoints/720checkpoint.pth filter=lfs diff=lfs merge=lfs -text
 checkpoints/96checkpoint.pth filter=lfs diff=lfs merge=lfs -text
+dataset/traffic.csv filter=lfs diff=lfs merge=lfs -text
