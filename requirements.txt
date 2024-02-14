@@ -1,0 +1,17 @@
+fastapi==0.74.*
+requests==2.27.*
+sentencepiece==0.1.*
+torch==1.13.*
+transformers==4.*
+uvicorn[standard]==0.17.*
+plotly
+einops
+scikit-learn
+pandas
+numpy
+# reformer_pytorch
+# patool
+matplotlib
+statsmodels
+sentencepiece
+peft
