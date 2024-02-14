@@ -1,0 +1,59 @@
+body {
+    padding: 20px;
+}
+
+.wrapper {
+    display: flex;
+    width: 100%;
+}
+
+#sidebar {
+    width: 250px;
+    height: 100vh;
+    position: fixed;
+    background: #7386D5;
+    color: #fff;
+    padding:20px;
+}
+
+#content {
+    flex-grow: 1;
+    margin-left: 250px;
+    padding: 20px;
+}
+
+#plotly-chart {
+    height: 500px;
+}
+
+#table-container {
+    max-height: 500px;  /* Set to a suitable max height */
+    overflow-y: auto;
+}
+
+/* The Modal (background) */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+
+    /* Flexbox to center the content */
+    display: flex;
+    align-items: center; /* Vertical centering */
+    justify-content: center; /* Horizontal centering */
+}
+
+/* Modal Content */
+.modal-content {
+    background-color: #fefefe;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 30%;
+    text-align: center;
+}
