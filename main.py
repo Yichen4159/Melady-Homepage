@@ -15,8 +15,8 @@ from models.GPT4TS_multi_prompt_residual import GPT4TS_multi
 # app = FastAPI()
 #
 # app.mount("/static", StaticFiles(directory="static"), name="static")
-# device = torch.device('cpu')
-# models = {96: None, 192: None, 336: None, 720: None}
+device = torch.device('cpu')
+models = {96: None, 192: None, 336: None, 720: None}
 
 # @app.on_event("startup")
 
