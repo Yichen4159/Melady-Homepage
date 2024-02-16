@@ -29,17 +29,6 @@ models = {96: None, 192: None, 336: None, 720: None}
 
 import gradio as gr
 
-# 定义Gradio界面
-iface = gr.Interface(
-    fn=forecast_for_gradio,  # 使用新的预测函数
-    inputs=[
-        gr.inputs.Textbox(label="Datasets"),  # 对应于datasets参数
-        gr.inputs.Number(label="Lengths"),  # 对应于lengths参数
-        gr.inputs.Slider(minimum=0, maximum=10000, default=0, label="Index")  # 对应于index参数
-    ],
-    outputs=gr.outputs.JSON(label="Forecast Results")  # 输出为JSON
-)
-
 
 def display_page():
     with open("static/index.html", "r") as f:
@@ -231,6 +220,18 @@ def forecast_for_gradio(datasets, lengths, index):
         model.load_state_dict(torch.load(best_model_path))
 
         return {"load": "successful"}
+
+                           
+# 定义Gradio界面
+iface = gr.Interface(
+    fn=forecast_for_gradio,  # 使用新的预测函数
+    inputs=[
+        gr.inputs.Textbox(label="Datasets"),  # 对应于datasets参数
+        gr.inputs.Number(label="Lengths"),  # 对应于lengths参数
+        gr.inputs.Slider(minimum=0, maximum=10000, default=0, label="Index")  # 对应于index参数
+    ],
+    outputs=gr.outputs.JSON(label="Forecast Results")  # 输出为JSON
+)
 
 
 # 启动Gradio界面
