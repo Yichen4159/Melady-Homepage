@@ -7,11 +7,15 @@ from torch.utils.data import DataLoader
 from utils.helper import convert_to_timestamp
 import torch
 import json
+import plotly.graph_objs as go
 import os
+import pandas as pd
 import numpy as np
 from datetime import datetime
 from models.GPT4TS_multi_prompt_residual import GPT4TS_multi
+import plotly.express as px
 
+import gradio as gr
 # app = FastAPI()
 #
 # app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -27,212 +31,120 @@ models = {96: None, 192: None, 336: None, 720: None}
 #     model = model.load_state_dict(torch.load(checkpoints_path, map_location=device))
 
 
-import gradio as gr
-
-
-def display_page():
-    with open("static/index.html", "r") as f:
-        html_content = f.read()
-    return html_content
+# help(gr.outputs)
+# def display_page():
+#     with open("static/index.html", "r") as f:
+#         html_content = f.read()
+#     return html_content
 
 
 # 这是转换后的forecast函数，与原始函数逻辑相同
-def forecast_for_gradio(datasets, lengths, index):
-    async def forecast(datasets: str = Query(...), lengths: int = Query(...), index: int = 0,
-                       dataloader: Optional[List[int]] = Query(None)):
-        print("lengths: ", lengths)
-        print("datasets: ", datasets)
-        global model
-        num_workers = 0
-        shuffle_flag = False
-        drop_last = True
-        batch_size = 1
-        filename = './dataset/test_' + datasets + str(lengths) + '_dataset.pth'
+async def forecast_for_gradio(datasets: str, lengths: int, index: int = 0):
+    # 确保长度和索引参数是整数
+    lengths = int(lengths)
+    index = int(index)
 
-        if os.path.exists(filename):
-            print("pth exist, loading...")
-            test_dataset = torch.load(filename)
-        else:
-            print(datasets + str(lengths) + " dataset not exist, create new pth")
-            test_dataset = get_test_data_loader(datasets, lengths)
-            torch.save(test_dataset, filename)
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=batch_size,
-            shuffle=shuffle_flag,
-            num_workers=num_workers,
-            drop_last=drop_last)
-        # print(test_loader)
-        # data_list = [test_loader.dataset[i] for i in range(len(test_loader.dataset))]
-        # data_list = [
-        #                 (arr1.tolist(), arr2.tolist(), arr3.tolist(), arr4.tolist(), arr5.tolist(), arr6.tolist(), arr7.tolist())
-        #                 for arr1, arr2, arr3, arr4, arr5, arr6, arr7 in data_list
-        #             ]
-        # all_timestamps = []
-        # all_pred_timestamps = []
-        # all_values = []
-        # all_predictions = []
+    filename = f'./dataset/test_{datasets}{lengths}_dataset.pth'
+    if not os.path.exists(filename):
+        test_dataset = get_test_data_loader(datasets, lengths)
+        torch.save(test_dataset, filename)
+    else:
+        test_dataset = torch.load(filename)
 
-        data = test_loader.dataset[index]
-        # print(np.array(data[0]).shape)
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=0,
+        drop_last=True
+    )
 
-        batch_x, batch_y, batch_x_mark, batch_y_mark, seq_trend, seq_seasonal, seq_resid = torch.tensor(
-            data[0]).unsqueeze(
-            dim=0), torch.tensor(data[1]).unsqueeze(dim=0), \
-            torch.tensor(data[2]).unsqueeze(dim=0), torch.tensor(data[3]).unsqueeze(dim=0), \
-            torch.tensor(data[4]).unsqueeze(dim=0), torch.tensor(data[5]).unsqueeze(dim=0), \
-            torch.tensor(data[6]).unsqueeze(dim=0)
-        batch_x = batch_x.float().to(device)
-        seq_trend = seq_trend.float().to(device)
-        seq_seasonal = seq_seasonal.float().to(device)
-        seq_resid = seq_resid.float().to(device)
-        batch_y = batch_y.float()
-        batch_x_mark = batch_x_mark.float().to(device)
-        batch_y_mark = batch_y_mark.float().to(device)
+    data = test_loader.dataset[index]
+    batch_x, batch_y, batch_x_mark, batch_y_mark, seq_trend, seq_seasonal, seq_resid = [
+        torch.tensor(data[i]).unsqueeze(0).float().to(device) for i in range(7)
+    ]
 
-        # print(batch_y.shape)
-        # print(seq_trend.shape)
-        # print(seq_seasonal.shape)
-        # print(seq_resid.shape)
-        # print(batch_y.shape)
-        # print(batch_x_mark.shape)
-        # print(batch_y_mark.shape)
+    if models[lengths] is None:
+        print(f"{lengths} model not exist, creating model")
+        best_model_path = f'checkpoints/{lengths}checkpoint.pth'
+        models[lengths] = GPT4TS_multi(device, pred_len=lengths)
+        models[lengths].load_state_dict(torch.load(best_model_path, map_location=device))
 
-        if models[lengths] is None:
-            # model = GPT4TS_multi(device, pred_len=lengths)
-            print(str(lengths) + ' model not exist, creating model')
-            best_model_path = 'checkpoints/' + str(lengths) + 'checkpoint.pth'
-            # print(best_model_path)
-            # model.load_state_dict(torch.load(best_model_path, map_location=device))
-            # Step 2: Load the model during the startup event
-            models[lengths] = GPT4TS_multi(device, pred_len=lengths)
-            models[lengths].load_state_dict(torch.load(best_model_path, map_location=device))
-        else:
-            print(str(lengths) + ' model exist')
-        outputs = models[lengths](batch_x, 0, seq_trend, seq_seasonal, seq_resid)
-        print("outputs init: ", outputs.shape)
-        outputs = outputs[:, -lengths:, :]
-        print("outputs before: ", outputs.shape)
-        batch_y_mark = batch_y_mark[:, -lengths:, :]
-        outputs = outputs.squeeze()
-        print("outputs: ", outputs.shape)
+    outputs = models[lengths](batch_x, 0, seq_trend, seq_seasonal, seq_resid)
+    outputs = outputs.squeeze().detach().cpu().numpy().tolist()
 
-        # print(batch_x_mark)
-        # print(batch_x_mark.shape) # [336, 5]
+    timestamps = [convert_to_timestamp(*row.tolist(), flag=datasets) for row in batch_x_mark.squeeze()]
+    pred_timestamps = [convert_to_timestamp(*row.tolist(), flag=datasets) for row in batch_y_mark.squeeze()[-lengths:]]
 
-        batch_x = batch_x.squeeze()
-        batch_x_mark = batch_x_mark.squeeze()
-        # 2020, 10, 15, 12,0
-        # 2020, 10, 15, 12,0
-        batch_y_mark = batch_y_mark.squeeze()
-        print("batch_x_mark: ", batch_x_mark.shape)
-        print("batch_y_mark: ", batch_y_mark.shape)
-        print('batch_x_mark: ', batch_x_mark)
-        timestamps = [convert_to_timestamp(*row, flag=datasets) for row in batch_x_mark]
-        print('before timestamps length:', len(timestamps))
-        # all_timestamps.append(timestamps)
-        pred_timestamps = [convert_to_timestamp(*row, flag=datasets) for row in batch_y_mark]
-        timestamps.extend(pred_timestamps)
-        print('after timestamps length:', len(timestamps))
-        # all_pred_timestamps.append(pred_timestamps)
-        true_values = batch_x.cpu().numpy().tolist()
-        true_values_y = batch_y[:, -lengths:, :].squeeze().cpu().numpy().tolist()
-        true_values.extend(true_values_y)
-        # all_values.append(batch_x.cpu().numpy().tolist())
-        # all_predictions.append(outputs.detach().cpu().numpy().tolist())
-        forecast_data = {
-            "time": timestamps,
-            "values": true_values,
-            # "values": batch_x.cpu().numpy().tolist(),
-            "prediction": outputs.detach().cpu().numpy().tolist(),
-            "prediction_time": pred_timestamps,
-            "data_max": len(test_loader.dataset)
-            # "data_list": data_list
-        }
+    timestamps.extend(pred_timestamps)
 
-        # return JSONResponse(content=json.dumps(forecast_data))
-        return forecast_data
-        return 1
+    true_values = batch_x.squeeze().cpu().numpy().tolist()
+    true_values_y = batch_y.squeeze()[-lengths:].cpu().numpy().tolist()
+    true_values.extend(true_values_y)
 
-        for i, data in enumerate(test_loader):
-            batch_x, batch_y, batch_x_mark, batch_y_mark, seq_trend, seq_seasonal, seq_resid = data[0], data[1], data[
-                2], \
-                data[3], data[4], data[5], data[6]
-            batch_x = batch_x.float().to(device)
-            seq_trend = seq_trend.float().to(device)
-            seq_seasonal = seq_seasonal.float().to(device)
-            seq_resid = seq_resid.float().to(device)
-            batch_y = batch_y.float()
-            batch_x_mark = batch_x_mark.float().to(device)
-            batch_y_mark = batch_y_mark.float().to(device)
-            print(batch_x.shape)
-            print(seq_trend.shape)
-            print(seq_seasonal.shape)
-            print(seq_resid.shape)
-            print(batch_y.shape)
-            print(batch_x_mark.shape)
-            print(batch_y_mark.shape)
-        #     model = GPT4TS_multi(device)
-        #     best_model_path = 'checkpoints/336checkpoint.pth'
-        #     model.load_state_dict(torch.load(best_model_path, map_location=device))
-        #     outputs = model(batch_x, 0, seq_trend, seq_seasonal, seq_resid)
-        #     print("outputs init: ", outputs.shape)
-        #     outputs = outputs[:, -lengths:, :]
-        #     print("outputs before: ", outputs.shape)
-        #     batch_y_mark = batch_y_mark[:, -lengths:, :]
-        #     outputs = outputs.squeeze()
-        #     print("outputs: ", outputs.shape)
+    forecast_data = {
+        "time": timestamps,
+        "values": true_values,
+        "prediction": outputs,
+        "prediction_time": pred_timestamps,
+        "data_max": len(test_loader.dataset)
+    }
 
-        #     # print(batch_x_mark)
-        #     # print(batch_x_mark.shape) # [336, 5]
+    # 此处应该是您用于生成图表和数据表格的逻辑
+    plot_figure = forecast_plot(forecast_data)
+    data_table = data_graph(forecast_data)
 
-        #     batch_x = batch_x.squeeze()
-        #     batch_x_mark = batch_x_mark.squeeze()
-        #     batch_y_mark = batch_y_mark.squeeze()
-        #     print("batch_x_mark: ", batch_x_mark.shape)
-        #     print("batch_y_mark: ", batch_y_mark.shape)
-        #     timestamps = [convert_to_timestamp(*row) for row in batch_x_mark]
-        #     all_timestamps.append(timestamps)
-        #     pred_timestamps = [convert_to_timestamp(*row) for row in batch_y_mark]
-        #     all_pred_timestamps.append(pred_timestamps)
+    return plot_figure, data_table
 
-        #     all_values.append(batch_x.cpu().numpy().tolist())
-        #     all_predictions.append(outputs.detach().cpu().numpy().tolist())
-        # forecast_data = {
-        #     "time": timestamps,
-        #     "values": batch_x.cpu().numpy().tolist(),
-        #     "prediction": outputs.detach().cpu().numpy().tolist(),
-        #     "prediction_time": pred_timestamps
-        # }
 
-        # return forecast_data
-        # forecast_data = {
-        #     "time": all_timestamps,
-        #     "values": all_values,
-        #     "prediction": all_predictions,
-        #     "prediction_time": all_pred_timestamps
-        # }
+def forecast_plot(forecast_data):
+    # 分别提取时间、真实值、预测值及其对应的时间
+    timestamps = forecast_data["time"]
+    true_values = forecast_data["values"]
+    prediction = forecast_data["prediction"]
+    prediction_time = forecast_data["prediction_time"]
 
-        # return forecast_data
+    # 创建真实值的折线图
+    trace1 = go.Scatter(x=timestamps, y=true_values, mode='lines', name='Actual')
 
-        model = GPT4TS_multi(args, device)
-        best_model_path = 'checkpoints/336checkpoint.pth'
-        model.load_state_dict(torch.load(best_model_path))
+    # 创建预测值的折线图
+    trace2 = go.Scatter(x=prediction_time, y=prediction, mode='lines', name='Prediction')
 
-        return {"load": "successful"}
+    # 定义图表布局
+    layout = go.Layout(title='Prediction Data', xaxis=dict(title='Time'), yaxis=dict(title='Value'))
 
-                           
+    # 生成图表
+    fig = go.Figure(data=[trace1, trace2], layout=layout)
+
+    # 返回图表对象
+    return fig
+
+
+# 定义数据表格输出函数
+def data_graph(forecast_data):
+    # 提取时间和真实值数据
+    timestamps = forecast_data["time"]
+    true_values = forecast_data["values"]
+
+    # 创建数据表格
+    df = pd.DataFrame({'Time': timestamps, 'Value': true_values})
+
+    return df
+
+
 # 定义Gradio界面
 iface = gr.Interface(
-    fn=forecast_for_gradio,  # 使用新的预测函数
+    fn=forecast_for_gradio,
     inputs=[
-        gr.inputs.Textbox(label="Datasets"),  # 对应于datasets参数
-        gr.inputs.Number(label="Lengths"),  # 对应于lengths参数
-        gr.inputs.Slider(minimum=0, maximum=10000, default=0, label="Index")  # 对应于index参数
+        gr.inputs.Dropdown(label="Select Dataset", choices=["ETTm1", "ETTm2", "ETTh1", "ETTh2", "Weather", "Traffic"]),
+        gr.inputs.Dropdown(label="Select Predict Length", choices=["96", "192", "336", "720"]),
+        gr.inputs.Slider(minimum=0, maximum=10000, step=1, label="Index")
     ],
-    outputs=gr.outputs.JSON(label="Forecast Results")  # 输出为JSON
+    outputs=[
+        gr.Plot(label="Forecast Plot"),
+        gr.Dataframe(label="Data Graph")
+    ]
 )
 
-
 # 启动Gradio界面
-iface.launch()
+iface.launch(share=True)

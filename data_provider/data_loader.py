@@ -51,7 +51,7 @@ class Dataset_ETT_hour(Dataset):
         self.enc_in = self.data_x.shape[-1]
         print("self.enc_in = {}".format(self.enc_in))
         print("self.data_x = {}".format(self.data_x.shape))
-        self.tot_len = len(self.data_x) - self.seq_len - self.pred_len + 1
+        self.tot_len = int(len(self.data_x)) - int(self.seq_len) - int(self.pred_len) + 1
         
        
     def stl_resolve(self, data_raw, data_name):
@@ -177,7 +177,7 @@ class Dataset_ETT_hour(Dataset):
         
         s_end = s_begin + self.seq_len
         r_begin = s_end - self.label_len
-        r_end = r_begin + self.label_len + self.pred_len
+        r_end = int(r_begin) + int(self.label_len) + int(self.pred_len)
         seq_x = self.data_x[s_begin:s_end, feat_id:feat_id+1]
         seq_y = self.data_y[r_begin:r_end, feat_id:feat_id+1]
         seq_x_mark = self.data_stamp[s_begin:s_end]
@@ -189,7 +189,7 @@ class Dataset_ETT_hour(Dataset):
         return seq_x, seq_y, seq_x_mark, seq_y_mark, seq_trend, seq_seasonal, seq_resid
 
     def __len__(self):
-        return (len(self.data_x) - self.seq_len - self.pred_len + 1) * self.enc_in
+        return (int(len(self.data_x)) - int(self.seq_len) - int(self.pred_len) + 1) * self.enc_in
 
     def inverse_transform(self, data):
         return self.scaler.inverse_transform(data)
